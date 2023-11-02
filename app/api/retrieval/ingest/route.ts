@@ -4,6 +4,7 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseVectorStore } from "langchain/vectorstores/supabase";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import excuteQuery from "../../db";
 
 export const runtime = "edge";
 
@@ -17,9 +18,18 @@ export const runtime = "edge";
  * https://js.langchain.com/docs/modules/data_connection/document_transformers/text_splitters/recursive_text_splitter
  * https://js.langchain.com/docs/modules/data_connection/vectorstores/integrations/supabase
  */
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const text = body.text;
+
+  const result = excuteQuery({
+    query: 'SELECT * FROM bot_prompts WHERE bot_prompt_group_id = ?',
+    values: [3]
+  })
+
+  console.log(result)
+
 
   if (process.env.NEXT_PUBLIC_DEMO === "true") {
     return NextResponse.json(
@@ -61,3 +71,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
+

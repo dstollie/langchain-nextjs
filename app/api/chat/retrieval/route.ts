@@ -16,6 +16,8 @@ import {
   StringOutputParser,
 } from "langchain/schema/output_parser";
 import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { PineconeStore } from "langchain/vectorstores/pinecone";
+import { Pinecone } from "@pinecone-database/pinecone";
 
 export const runtime = "edge";
 
@@ -37,7 +39,8 @@ const formatVercelMessages = (chatHistory: VercelChatMessage[]) => {
   return formattedDialogueTurns.join("\n");
 };
 
-const CONDENSE_QUESTION_TEMPLATE = `Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+const CONDENSE_QUESTION_TEMPLATE = `Gegeven de conversatie tussen een chatbot en een mens, is het uw taak om de laatste boodschap te herformuleren naar de intentie van de mensen. Neem de context in overweging alvorens dit te doen.
+
 
 <chat_history>
   {chat_history}
@@ -49,10 +52,14 @@ const condenseQuestionPrompt = PromptTemplate.fromTemplate(
   CONDENSE_QUESTION_TEMPLATE,
 );
 
-const ANSWER_TEMPLATE = `You are an energetic talking puppy named Dana, and must answer all questions like a happy, talking dog would.
-Use lots of puns!
+const ANSWER_TEMPLATE = `Jij bent chatbot Kiki en werkt bij Zonneplan als Klantenservice AI bot. 
+Jij beantwoordt alle vragen van de klanten van Zonneplan die zij online stellen over Zonneplan Energie.
+Je gebruikt informele maar zakelijke taal. Je spreekt met je, jij, jou en jouw en gebruikt geen u of uw.
+Je spreekt over en vanuit Zonneplan in de wij-vorm.
+Je geeft antwoord in maximaal 80 woorden. Jouw antwoorden bestaan uit maximaal 80 woorden.
+Wanneer je geen antwoord hebt op de vraag of je bent hier onzeker over zeg dan 'Sorry, ik heb geen antwoord op deze vraag.'
+Baseer je antwoord alleen op basis van de onderstaande context, je mag nooit praten over iets wat niet in de context staat!
 
-Answer the question based only on the following context and chat history:
 <context>
   {context}
 </context>
@@ -60,6 +67,8 @@ Answer the question based only on the following context and chat history:
 <chat_history>
   {chat_history}
 </chat_history>
+
+Einde context. Baseer je antwoord alleen op basis van de context, bedenk niets.
 
 Question: {question}
 `;
@@ -79,18 +88,19 @@ export async function POST(req: NextRequest) {
     const currentMessageContent = messages[messages.length - 1].content;
 
     const model = new ChatOpenAI({
-      modelName: "gpt-3.5-turbo",
+      modelName: "gpt-4",
       temperature: 0.2
     });
 
-    const client = createClient(
-      process.env.SUPABASE_URL!,
-      process.env.SUPABASE_PRIVATE_KEY!,
-    );
-    const vectorstore = new SupabaseVectorStore(new OpenAIEmbeddings(), {
-      client,
-      tableName: "documents",
-      queryName: "match_documents",
+    const pinecone = new Pinecone({
+      apiKey: process.env.PINECONE_API_KEY || '',
+      environment: process.env.PINECONE_ENVIRONMENT || '',
+    });
+    const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME || '');
+
+    const vectorstore = new PineconeStore(new OpenAIEmbeddings(), {
+      pineconeIndex,
+      namespace: process.env.PINECONE_NAME_SPACE || '',
     });
 
     /**
